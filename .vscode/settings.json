@@ -1,0 +1,27 @@
+{
+  //stm32f3discovry
+  /*"mcu": "stm32f303vct6", 
+  "svd_file": "${workspaceRoot}/mcu/stm32f303/STM32F303.svd",
+  "openocd_config":"${workspaceRoot}/mcu/stm32f303/openocd.cfg",
+  "flash_size": 256000,
+  "ram_size": 48000,
+  "target": "thumbv7em-none-eabihf",
+  "exec_name": "${workspaceFolderBasename}",
+  "exec_basepath":"${workspaceRoot}/target/${config:target}",
+  */
+  //stm32f103 (blue pill) 
+  
+  "mcu": "stm32f103c8", 
+  "svd_file": "${workspaceRoot}/mcu/stm32f103/STM32F103.svd",
+  //for chinese version
+  "openocd_config":"${workspaceRoot}/mcu/stm32f103/openocd_cks32f1.cfg",
+  //for normal version
+  //"openocd_config":"${workspaceRoot}/mcu/stm32f103/openocd.cfg",
+  "flash_size": 64000,
+  "ram_size": 20000,
+  "target": "thumbv7m-none-eabi",
+  "exec_name": "${workspaceFolderBasename}",
+  "exec_basepath": "${workspaceRoot}/target/${config:target}",
+  "cmake.configureOnOpen": false,
+  
+}

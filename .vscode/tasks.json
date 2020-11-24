@@ -1,0 +1,153 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "size debug",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "${env:AVR32_HOME}/vsavr/bin/size_printer.py",
+        "--size=arm-none-eabi-size.exe",
+        "--elf=${config:exec_basepath}/debug/${config:exec_name}",
+        "--mcu=${config:mcu}",
+        "--maxflash=${config:flash_size}",
+        "--maxram=${config:ram_size}"
+      ],
+      "options": {
+        "cwd": "${workspaceRoot}"
+      },
+      "presentation": {
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      }
+    },
+    {
+      "label": "size release",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "${env:AVR32_HOME}/vsavr/bin/size_printer.py",
+        "--size=arm-none-eabi-size.exe",
+        "--elf=${config:exec_basepath}/release/${config:exec_name}",
+        "--mcu=${config:mcu}",
+        "--maxflash=${config:flash_size}",
+        "--maxram=${config:ram_size}"
+      ],
+      "options": {
+        "cwd": "${workspaceRoot}"
+      },
+      "presentation": {
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      }
+    },
+    {
+      /*
+       * This is the default cargo build task,
+       * but we need to provide a label for it,
+       * so we can invoke it from the debug launcher.
+       */
+      "label": "_cargo build",
+      "type": "process",
+      "command": "cargo",
+      "args": ["build"], //setup for crosscompiling
+      "problemMatcher": ["$rustc"],
+      "presentation": {
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+
+    {
+      "label": "cargo build",
+      "problemMatcher": ["$rustc"],
+      "dependsOn": ["_cargo build", "size debug"],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+
+    {
+      "label": "_cargo build --release",
+      "type": "process",
+      "command": "cargo",
+      "args": ["build", "--release"], //setup for crosscompiling
+      "problemMatcher": ["$rustc"],
+      //"group": "build",
+      "presentation": {
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "cargo build --release",
+      "problemMatcher": ["$rustc"],
+      "dependsOn": ["_cargo build --release", "size release"],
+      "dependsOrder": "sequence",
+      "group": "build"
+    },
+    {
+      "label": "_cargo build --examples",
+      "type": "process",
+      "command": "cargo",
+      "args": ["build", "--examples"],
+      "problemMatcher": ["$rustc"],
+      // "group": "build",
+      "presentation": {
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "cargo build --examples",
+      "problemMatcher": ["$rustc"],
+      "dependsOn": ["_cargo build --examples", "size release"],
+      "dependsOrder": "sequence",
+      "group": "build"
+    },
+
+    {
+      "label": "_cargo build --examples --release",
+      "type": "process",
+      "command": "cargo",
+      "args": ["build", "--examples", "--release"],
+      "problemMatcher": ["$rustc"],
+      //"group": "build",
+      "presentation": {
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "cargo build --examples --release",
+      "problemMatcher": ["$rustc"],
+      "dependsOn": ["_cargo build --examples --release", "size release"],
+      "dependsOrder": "sequence",
+      "group": "build"
+    },
+
+    {
+      "label": "cargo clean",
+      "type": "process",
+      "command": "cargo",
+      "args": ["clean"],
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "clear": true
+      }
+    }
+    //
+  ]
+}
+
