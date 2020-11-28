@@ -1,53 +1,65 @@
-#![deny(unsafe_code)]
 #![no_std]
 #![no_main]
-
-//#[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust#53964
-//extern crate board_support;
 
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust#53964
 extern crate panic_halt; // panic hnadler
 use cortex_m_rt::entry;
-
 extern crate hal;
-use hal::{pac}; //mcu select
+use crate::hal::{
+    gpio::{gpioc,Output,PushPull},
+    pac::{Peripherals},
+    prelude::*,
+};
+use core::cell::RefCell;
 
-use hal::{prelude::*,timer::Timer};
-//use pac::{TIM6};
-use nb::block;
 #[allow(unused_imports)]
-use cortex_m::{asm::bkpt, iprint, iprintln, peripheral::ITM};
+use cortex_m::{asm::bkpt, iprint, iprintln, peripheral::ITM,interrupt::Mutex};
 use embedded_hal::digital::v2::OutputPin;
+
+#[allow(unused_imports)]
+use nb::block;
+
+
+type LedPin = gpioc::PC13<Output<PushPull>>;
+static _LED:Mutex<RefCell<Option<LedPin>>> = Mutex::new(RefCell::new(None));
+
+
+mod system_timer;
+use system_timer::{SystemTimer};
+mod timer;
+use timer::{Timer,CounterTypeExt};
+
+
 
 
 
 #[entry]
 fn main() -> ! {
-    let cp = cortex_m::Peripherals::take().unwrap();
-    let dp = pac::Peripherals::take().unwrap();
+    //let cp = cortex_m::Peripherals::take().unwrap();
+    let dp = Peripherals::take().unwrap();
 
     let mut flash = dp.FLASH.constrain();
     let mut rcc = dp.RCC.constrain();
     
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
     let mut gpio = dp.GPIOC.split(&mut rcc.apb2);
-    let mut led = gpio.pc13.into_push_pull_output(&mut gpio.crh);
-    //let mut timer = Timer::syst(cp.SYST,&clocks).start_count_down(1.hz());
-    let mut timer = Timer::tim1(dp.TIM1,&clocks,&mut rcc.apb2).start_count_down(1.hz());
-    let mut itm = cp.ITM;
+    let mut led:LedPin = gpio.pc13.into_push_pull_output(&mut gpio.crh);
+    led.set_high().unwrap();
+    SystemTimer::init(dp.TIM2,&clocks,&mut rcc.apb1);
+    //let mut itm = cp.ITM;
     
-    iprintln!(&mut itm.stim[0], "hello wordl!");
+    //iprintln!(&mut itm.stim[0], "hello wordl!");
 
 
     // Ждём пока таймер запустит обновление
     // и изменит состояние светодиода.
+    let mut t = Timer::new();
     loop {
-        //timer.start(1.hz());
-        block!(timer.wait()).unwrap();
-        led.set_high().unwrap();
-        //timer.start(1.hz());
-        block!(timer.wait()).unwrap();
-        led.set_low().unwrap();
+        if t.every(1.sec()) {
+            cortex_m::interrupt::free(|_|{
+                led.toggle().unwrap();
+            })
+        }
     }
 
 

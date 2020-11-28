@@ -23,7 +23,6 @@
         "focus": false,
         "panel": "shared",
         "showReuseMessage": false,
-        "clear": false
       }
     },
     {
@@ -73,7 +72,8 @@
       "dependsOrder": "sequence",
       "group": {
         "kind": "build",
-        "isDefault": true
+        "isDefault": true,
+        "clear": true,
       }
     },
 
