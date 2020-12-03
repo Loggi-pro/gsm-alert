@@ -12,7 +12,6 @@ use crate::hal::{
     serial::{self, Serial},
 };
 use core::cell::RefCell;
-use core::sync::atomic::{self, Ordering};
 
 #[allow(unused_imports)]
 use cortex_m::{asm::bkpt, interrupt::Mutex, iprint, iprintln, peripheral::ITM, singleton};
@@ -29,9 +28,14 @@ mod timer;
 use timer::{CounterTypeExt, Timer};
 mod usart_adapter;
 use usart_adapter::UsartAdapter;
+static mut _USART: Option<UsartAdapter> = None;
 
 #[interrupt]
-fn USART1() {}
+fn USART1() {
+    unsafe {
+        _USART.as_mut().unwrap().isr_handler();
+    }
+}
 
 #[entry]
 fn main() -> ! {
@@ -62,16 +66,20 @@ fn main() -> ! {
         clocks,
         &mut rcc.apb2,
     );
-    let mut adapter = UsartAdapter::new(serial, channels);
-    adapter.write_data(b"hello");
-    adapter.write_data(b"hello2");
-
-    let mut t = Timer::new();
-    loop {
-        if t.every(1.sec()) {
-            cortex_m::interrupt::free(|_| {
-                led.toggle().unwrap();
-            })
+    let adapter = UsartAdapter::new(serial, channels);
+    unsafe {
+        _USART = Some(adapter);
+        _USART.as_mut().unwrap().write_data(b"hello");
+        _USART.as_mut().unwrap().write_data(b"hello2");
+        let (_a, _b) = _USART.as_mut().unwrap().read_data();
+        let (_a, _b) = _USART.as_mut().unwrap().read_data();
+        let mut t = Timer::new();
+        loop {
+            if t.every(1.sec()) {
+                cortex_m::interrupt::free(|_| {
+                    led.toggle().unwrap();
+                })
+            }
         }
     }
 }
