@@ -1,5 +1,4 @@
 use core::sync::atomic::Ordering;
-extern crate hal;
 use crate::hal::{
     pac::{interrupt, Interrupt, TIM2},
     prelude::*,
@@ -10,10 +9,7 @@ use cortex_m::interrupt::Mutex;
 
 pub type CounterType = u16;
 
-#[path = "atomic_types.rs"]
-mod atomic_types;
-use atomic_types::HasAtomic;
-
+use crate::utils::atomic_types::HasAtomic;
 type TimeType = <CounterType as HasAtomic>::Atomic;
 
 static COUNTER_MS: TimeType = TimeType::new(0);

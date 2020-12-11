@@ -1,10 +1,17 @@
-use crate::system_timer::{SystemTimer,CounterType};
-
+use crate::hardware::system_timer::{SystemTimer,CounterType};
+use crate::hal::{
+    pac::{TIM2},
+};
 pub struct Timer {
     time:CounterType
 }
 #[allow(dead_code)]
 impl Timer {
+
+    pub fn init_system(tim: TIM2, clocks: &hal::rcc::Clocks, apb1: &mut hal::rcc::APB1){
+        SystemTimer::init(tim,clocks,apb1);
+    }
+
     pub fn new()->Timer {
         Timer {time:SystemTimer::now()}
     }

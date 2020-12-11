@@ -25,6 +25,7 @@ impl UsartAdapter {
     fn get_hw() -> &'static mut usart1::RegisterBlock {
         unsafe { &mut *(USART1::ptr() as *mut _) }
     }
+
     pub fn new(_serial: Usart1, channels: hal::dma::dma1::Channels) -> Self {
         unsafe { cortex_m::peripheral::NVIC::unmask(Interrupt::USART1) };
         cortex_m::peripheral::NVIC::unpend(Interrupt::USART1);
@@ -136,3 +137,11 @@ impl UsartAdapter {
         self.flag_ready.store(true, Ordering::Relaxed)
     }
 }
+
+/* need in interrupt Line end
+#[interrupt]
+fn USART1() {
+    _USART.get().isr_handler();
+}
+
+*/
