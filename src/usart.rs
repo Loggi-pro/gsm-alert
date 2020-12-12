@@ -29,7 +29,7 @@ pub fn create_adapter(
         usart1,
         (txp, rxp),
         &mut mapr,
-        serial::Config::default().baudrate(19200.bps()),
+        serial::Config::default().baudrate(9600.bps()),
         clocks,
         &mut apb2,
     );

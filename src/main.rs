@@ -56,10 +56,8 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
     usart::_USART.set(adapter);
-    usart::_USART.get().write_data(b"hello");
-    usart::_USART.get().write_data(b"hello2");
-    let (_a, _b) = usart::_USART.get().read_data();
-    let (_a, _b) = usart::_USART.get().read_data();
+    let sim900 = Sim900::new();
+    sim900.init();
     let mut t = Timer::new();
     loop {
         if t.every(1.sec()) {

@@ -50,6 +50,7 @@ impl UsartAdapter {
         }
     }
 
+    ///blocking tx data
     pub fn write_data(&mut self, arr: &[u8]) {
         //start separate DMAs for sending and receiving the data
         self.tx_channel
@@ -89,7 +90,8 @@ impl UsartAdapter {
         atomic::compiler_fence(Ordering::Acquire);
     }
 
-    pub fn read_data(&mut self) -> (&[u8], usize) {
+    ///start waiting for receive data
+    pub fn prepare_to_read(&mut self) {
         self.rx_channel
             .set_peripheral_address(unsafe { &(*USART1::ptr()).dr as *const _ as u32 }, false);
         self.rx_channel
@@ -113,9 +115,10 @@ impl UsartAdapter {
         });
         self.flag_ready.store(false, Ordering::Relaxed);
         self.rx_channel.start();
-        //block until all data was received
-        while !self.flag_ready.load(Ordering::Relaxed) {}
-        //stop
+    }
+
+    ///read received data from buffer
+    pub fn read_result(&mut self) -> (&[u8], usize) {
         atomic::compiler_fence(Ordering::Acquire);
         self.rx_channel.stop();
         self.rx_channel.ifcr().write(|w| w.cgif5().set_bit()); // C4 channel
@@ -127,6 +130,21 @@ impl UsartAdapter {
         atomic::compiler_fence(Ordering::Acquire);
         let len = MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize;
         (&self.rx_buf, len)
+    }
+    ///blocking waiting something received
+    pub fn read_data(&mut self) -> (&[u8], usize) {
+        self.prepare_to_read();
+        //block until all data was received
+        while !self.flag_ready.load(Ordering::Relaxed) {}
+        //stop
+        self.read_result()
+    }
+    ///send data and blocking waiting result
+    pub fn write_and_wait_answer(&mut self, arr: &[u8]) -> (&[u8], usize) {
+        self.prepare_to_read();
+        self.write_data(arr);
+        while !self.flag_ready.load(Ordering::Relaxed) {}
+        self.read_result()
     }
 
     pub fn isr_handler(&mut self) {
