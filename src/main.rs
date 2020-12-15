@@ -6,7 +6,7 @@ extern crate panic_halt; // panic hnadler
 use cortex_m_rt::entry;
 extern crate hal;
 use crate::hal::{
-    gpio::{gpioc, Output, PushPull},
+    gpio::{gpiob, gpioc, Output, PushPull},
     pac::Peripherals,
     prelude::*,
 };
@@ -18,7 +18,7 @@ use embedded_hal::digital::v2::OutputPin;
 use nb::block;
 
 type LedPin = gpioc::PC13<Output<PushPull>>;
-
+type Sim900PowerPin = gpiob::PB5<Output<PushPull>>;
 mod utils;
 
 mod sim900;
@@ -37,8 +37,10 @@ fn main() -> ! {
     let mut flash = dp.FLASH.constrain();
     let mut rcc = dp.RCC.constrain();
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
-    let mut gpio = dp.GPIOC.split(&mut rcc.apb2);
-    let mut led: LedPin = gpio.pc13.into_push_pull_output(&mut gpio.crh);
+    let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
+    let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
+    let power_pin: Sim900PowerPin = gpiob.pb5.into_push_pull_output(&mut gpiob.crl);
+    let mut led: LedPin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
     //_LED.set(led);
     led.set_high().unwrap();
     Timer::init_system(dp.TIM2, &clocks, &mut rcc.apb1);
@@ -56,8 +58,10 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
     usart::_USART.set(adapter);
-    let sim900 = Sim900::new();
+    let mut sim900 = Sim900::new(power_pin.downgrade());
     sim900.init();
+    let sim900 = sim900.power_on();
+    sim900.setup();
     let mut t = Timer::new();
     loop {
         if t.every(1.sec()) {
