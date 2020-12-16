@@ -23,13 +23,14 @@ impl Timer {
     }
     pub fn wait<T: TimeType>(&mut self, time: T) {
         self.reset();
-
-        loop {
-            let diff: CounterType = CounterType::wrapping_sub(SystemTimer::now(), self.time);
-            if diff >= time.value() {
-                break;
-            }
+        while self.waiting(&time) {
+            continue;
         }
+    }
+
+    pub fn waiting<T: TimeType>(&mut self, time: &T) -> bool {
+        let diff: CounterType = CounterType::wrapping_sub(SystemTimer::now(), self.time);
+        return if diff < time.value() { true } else { false };
     }
 
     pub fn every<T: TimeType>(&mut self, time: T) -> bool {

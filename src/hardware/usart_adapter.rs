@@ -5,6 +5,8 @@ use crate::hal::{
     pac::{usart1, Interrupt, USART1},
     serial::Serial,
 };
+use crate::utils::span::Span;
+
 
 use core::ptr;
 use core::sync::atomic::{self, Ordering};
@@ -20,6 +22,8 @@ pub struct UsartAdapter {
     rx_channel: hal::dma::dma1::C5,
     rx_buf: [u8; MAX_SIZE],
 }
+
+
 #[allow(dead_code)]
 impl UsartAdapter {
     fn get_hw() -> &'static mut usart1::RegisterBlock {
@@ -118,7 +122,10 @@ impl UsartAdapter {
     }
 
     ///read received data from buffer
-    pub fn read_result(&mut self) -> (&[u8], usize) {
+    pub fn read_result(&mut self) -> Option<Span> {
+        if !self.flag_ready.load(Ordering::Relaxed) {
+            return None;
+        }
         atomic::compiler_fence(Ordering::Acquire);
         self.rx_channel.stop();
         self.rx_channel.ifcr().write(|w| w.cgif5().set_bit()); // C4 channel
@@ -129,22 +136,17 @@ impl UsartAdapter {
         }
         atomic::compiler_fence(Ordering::Acquire);
         let len = MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize;
-        (&self.rx_buf, len)
+        Some(Span(&self.rx_buf, len))
     }
     ///blocking waiting something received
-    pub fn read_data(&mut self) -> (&[u8], usize) {
+    pub fn read_data(&mut self) -> Span {
         self.prepare_to_read();
         //block until all data was received
-        while !self.flag_ready.load(Ordering::Relaxed) {}
-        //stop
-        self.read_result()
-    }
-    ///send data and blocking waiting result
-    pub fn write_and_wait_answer(&mut self, arr: &[u8]) -> (&[u8], usize) {
-        self.prepare_to_read();
-        self.write_data(arr);
-        while !self.flag_ready.load(Ordering::Relaxed) {}
-        self.read_result()
+        loop {
+            if let Some(Span(_, len)) = self.read_result() {
+                return Span(&self.rx_buf, len);
+            }
+        }
     }
 
     pub fn isr_handler(&mut self) {
