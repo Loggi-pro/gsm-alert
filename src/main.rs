@@ -60,8 +60,19 @@ fn main() -> ! {
     usart::_USART.set(adapter);
     let mut sim900 = Sim900::new(power_pin.downgrade());
     sim900.init();
-    let sim900 = sim900.power_on();
-    sim900.setup();
+    let mut sim900 = sim900.power_on();
+    let mut a = 0;
+    match sim900.setup() {
+        Ok(_) => a = 1,
+        Err(sim900::RequestError::ENoDevice) => a = 2,
+        Err(sim900::RequestError::ENoAnswer) => a = 3,
+        Err(sim900::RequestError::EAnswerError) => a = 4,
+        Err(sim900::RequestError::ETimeout) => a = 5,
+        Err(sim900::RequestError::EBadRequest) => a = 6,
+        Err(sim900::RequestError::EAnswerUnknown) => a = 7,
+    };
+    a = a + 1 - 1;
+    let r = sim900.get_state();
     let mut t = Timer::new();
     loop {
         if t.every(1.sec()) {
