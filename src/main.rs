@@ -61,18 +61,12 @@ fn main() -> ! {
     let mut sim900 = Sim900::new(power_pin.downgrade());
     sim900.init();
     let mut sim900 = sim900.power_on();
-    let mut a = 0;
-    match sim900.setup() {
-        Ok(_) => a = 1,
-        Err(sim900::RequestError::ENoDevice) => a = 2,
-        Err(sim900::RequestError::ENoAnswer) => a = 3,
-        Err(sim900::RequestError::EAnswerError) => a = 4,
-        Err(sim900::RequestError::ETimeout) => a = 5,
-        Err(sim900::RequestError::EBadRequest) => a = 6,
-        Err(sim900::RequestError::EAnswerUnknown) => a = 7,
-    };
-    a = a + 1 - 1;
+    let _ = sim900.setup();
     let r = sim900.get_state();
+    //sim900.send_pdu_sms(
+    //    "0001000B919741123274F200082E0422044004350432043E043304300021000A0414043204350440044C0020043E0442043A0440044B044204300021",
+    //);
+    let r2 = sim900.get_state();
     let mut t = Timer::new();
     loop {
         if t.every(1.sec()) {

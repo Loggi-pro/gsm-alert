@@ -5,13 +5,13 @@ use crate::hal::{
     pac::{usart1, Interrupt, USART1},
     serial::Serial,
 };
+use crate::timer::{TimeType, Timer};
 use crate::utils::span::Span;
-
 
 use core::ptr;
 use core::sync::atomic::{self, Ordering};
 
-const MAX_SIZE: usize = 50;
+const MAX_SIZE: usize = 200;
 
 type Usart1 = Serial<USART1, (PA9<Alternate<PushPull>>, PA10<Input<Floating>>)>;
 pub struct UsartAdapter {
@@ -22,7 +22,6 @@ pub struct UsartAdapter {
     rx_channel: hal::dma::dma1::C5,
     rx_buf: [u8; MAX_SIZE],
 }
-
 
 #[allow(dead_code)]
 impl UsartAdapter {
@@ -123,6 +122,26 @@ impl UsartAdapter {
 
     ///read received data from buffer
     pub fn read_result(&mut self) -> Option<Span> {
+        if !self.flag_ready.load(Ordering::Relaxed) {
+            return None;
+        }
+        atomic::compiler_fence(Ordering::Acquire);
+        self.rx_channel.stop();
+        self.rx_channel.ifcr().write(|w| w.cgif5().set_bit()); // C4 channel
+        self.rx_channel.ch().cr.modify(|_, w| w.en().clear_bit());
+
+        unsafe {
+            ptr::read_volatile(&0);
+        }
+        atomic::compiler_fence(Ordering::Acquire);
+        let len = MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize;
+        Some(Span(&self.rx_buf, len))
+    }
+    ///read received data from buffer
+    pub fn read_timeout<T: TimeType>(&mut self, time: T) -> Option<Span> {
+        let mut t = Timer::new();
+        t.reset();
+        t.wait(time);
         if !self.flag_ready.load(Ordering::Relaxed) {
             return None;
         }

@@ -6,6 +6,8 @@ static SIM900_GET_SIM_STATUS: &str = "AT+CPIN?\r\n";
 //static SIM900_GET_MONEY: &str = "ATD#100#;\r\n";
 //static SIM900_GET_OPSOS: &str = "AT+COPS?\r\n";
 static SIM900_TEXT_MODE_ON: &str = "AT+CMGF=1\r\n";
+static SIM900_PDU_MODE_ON: &str = "AT+CMGF=0\r\n";
+//static SIM900_UTF_MODE: &str = "AT+CSCS=\"UCS2\"\r\n";
 //static SIM900_AON_ENABLE: &str = "AT+CLIP=1\r\n";
 //static SIM900_ECHO_OFF: &str = "ATE0\r\n";
 static SIM900_END: &str = "\r\n";
@@ -42,27 +44,28 @@ pub struct Sim900 {
     pin: Pxx<Output<PushPull>>,
     t: Timer,
 }
-
+extern crate heapless;
+use core::fmt::Write;
+use heapless::consts::*;
+use heapless::String;
 ///send data and blocking waiting result
-fn write_and_wait_answer<T: TimeType>(arr: &str, timeout: T) -> Option<Span> {
-    let mut t = Timer::new();
+fn write_and_wait_answer<'a, T: TimeType>(arr: &str, timeout: T) -> Option<Span<'a>> {
+    //let mut t = Timer::new();
     _USART.get().prepare_to_read();
     _USART.get().write_data(arr.as_bytes());
-    t.reset();
-    while t.waiting(&timeout) {
-        if let Some(r) = _USART.get().read_result() {
-            return Some(r);
-        }
-    }
-    return None;
+    _USART.get().read_timeout(timeout)
+    //if let Some(r) = _USART.get().read_timeout(timeout) {
+    //   return r;
+    //}
+    // return None;
 }
 
-pub enum RequestError {
+pub enum RequestError<'a> {
     ETimeout,
     ENoDevice,
     ENoAnswer,
     EAnswerError,
-    EAnswerUnknown,
+    EAnswerUnknown(&'a str),
     EBadRequest,
 }
 
@@ -77,7 +80,7 @@ fn parse(s: &str, len: usize) -> Result<(), RequestError> {
             } else if let Some(_) = s[x..].find(ANSWER_ERROR) {
                 Err(RequestError::EAnswerError)
             } else {
-                Err(RequestError::EAnswerUnknown)
+                Err(RequestError::EAnswerUnknown(s))
             }
         }
     };
@@ -85,17 +88,17 @@ fn parse(s: &str, len: usize) -> Result<(), RequestError> {
 }
 
 ///send data and blocking waiting result
-fn request<T: TimeType>(arr: &str, timeout: T) -> Result<(), RequestError> {
+fn request<'a, T: TimeType>(arr: &str, timeout: T) -> Result<(), RequestError<'a>> {
     let res = write_and_wait_answer(arr, timeout);
     let result = match res {
         None => Err(RequestError::ETimeout),
-        Some(Span(arr, len)) => parse(str::from_utf8(&arr[0..len]).unwrap(), len),
+        Some(Span(data, len)) => parse(str::from_utf8(&data[0..len]).unwrap(), len),
     };
     return result;
 }
 
 impl Sim900 {
-    const TIMEOUT: MilliSeconds = MilliSeconds(300_u16);
+    const TIMEOUT: MilliSeconds = MilliSeconds(200_u16);
     pub fn new(pin: Pxx<Output<PushPull>>) -> Self {
         Sim900 {
             pin,
@@ -123,6 +126,7 @@ impl Sim900 {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum Sim900State {
     Unknown,
     Good,
@@ -134,19 +138,30 @@ pub struct Sim900Powered {
     state: Sim900State,
 }
 
-extern crate heapless;
-use heapless::consts::*;
-use heapless::String;
+fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), RequestError<'a>> {
+    return match r {
+        Err(RequestError::EAnswerUnknown(data)) => {
+            if data.find(s).is_some() {
+                Ok(())
+            } else {
+                r
+            }
+        }
+        _ => r,
+    };
+}
+
 impl Sim900Powered {
-    pub fn get_state(self) -> Sim900State {
+    pub fn get_state(&self) -> Sim900State {
         return self.state;
     }
     pub fn setup(&mut self) -> Result<(), RequestError> {
         self.handle_request(|| -> Result<(), RequestError> {
-            request(SIM900_TEXT_MODE_ON, Sim900::TIMEOUT)?;
+            request(SIM900_PDU_MODE_ON, Sim900::TIMEOUT)?; //pdu mode for cyrillic
             request(SIM900_DATA_MODE, Sim900::TIMEOUT) //set 9600 bod in data mode
+                                                       //request(SIM900_UTF_MODE, Sim900::TIMEOUT) //set Unicode for sms
         }())?;
-        let res = request(SIM900_GET_SIM_STATUS, Sim900::TIMEOUT); //check sim
+        let res = request(SIM900_GET_SIM_STATUS, 1.sec()); //check sim
         if let Err(RequestError::EAnswerError) = res {
             self.state = Sim900State::NoSim;
             res
@@ -155,13 +170,15 @@ impl Sim900Powered {
         }
     }
 
-    fn handle_request(&mut self, x: Result<(), RequestError>) -> Result<(), RequestError> {
+    fn handle_request<'a>(
+        &mut self,
+        x: Result<(), RequestError<'a>>,
+    ) -> Result<(), RequestError<'a>> {
         match x {
             Ok(_) => self.state = Sim900State::Good,
             Err(RequestError::EBadRequest) => self.state = Sim900State::Good,
-            Err(RequestError::EAnswerError) | Err(RequestError::EAnswerUnknown) => {
-                self.state = Sim900State::BadAnswer;
-            }
+            Err(RequestError::EAnswerError) => self.state = Sim900State::BadAnswer,
+            Err(RequestError::EAnswerUnknown(_)) => self.state = Sim900State::BadAnswer,
             Err(RequestError::ENoDevice)
             | Err(RequestError::ENoAnswer)
             | Err(RequestError::ETimeout) => {
@@ -178,16 +195,39 @@ impl Sim900Powered {
             cmd.push_str(telephone)?;
             cmd.push('\"')?;
             cmd.push_str(SIM900_END)?;
-            request(&cmd, Sim900::TIMEOUT)?;
-            let mut message: String<U50> = String::from(msg);
+            let _ = request(&cmd, Sim900::TIMEOUT); //module not answer, ignore
+            let mut message: String<U100> = String::from(msg);
             message.push_str(SIM900_CMD_ENTER)?;
             request(&message, Sim900::TIMEOUT)
         }())
     }
+    pub fn send_pdu_sms(&mut self, msg: &str) -> bool {
+        if let Sim900State::Good = self.state {
+            self.handle_request(|| -> Result<(), RequestError> {
+                let mut cmd: String<U50> = String::from("AT+CMGS=");
+                let len = (msg.len() - 2) / 2;
+                write!(cmd, "{}\r", len)?;
+                expect_str(request(&cmd, Sim900::TIMEOUT), ">")?;
+                let mut message: String<U200> = String::from(msg);
+                message.push_str(SIM900_CMD_ENTER)?;
+                let _ = request(&message, Sim900::TIMEOUT); //ignore answer
+                Ok(())
+            }())
+            .is_ok()
+        } else {
+            false
+        }
+    }
 }
 
-impl From<()> for RequestError {
+impl<'a> From<()> for RequestError<'_> {
     fn from(_: ()) -> Self {
+        RequestError::EBadRequest
+    }
+}
+
+impl<'a> From<core::fmt::Error> for RequestError<'_> {
+    fn from(_: core::fmt::Error) -> Self {
         RequestError::EBadRequest
     }
 }
