@@ -6,7 +6,7 @@ extern crate panic_halt; // panic hnadler
 use cortex_m_rt::entry;
 extern crate hal;
 use crate::hal::{
-    gpio::{gpiob, gpioc, Output, PushPull},
+    gpio::{gpiob, Output, PushPull, Pxx},
     pac::Peripherals,
     prelude::*,
 };
@@ -17,7 +17,6 @@ use embedded_hal::digital::v2::OutputPin;
 #[allow(unused_imports)]
 use nb::block;
 
-type LedPin = gpioc::PC13<Output<PushPull>>;
 type Sim900PowerPin = gpiob::PB5<Output<PushPull>>;
 mod utils;
 
@@ -27,7 +26,9 @@ use sim900::Sim900;
 mod hardware;
 mod timer;
 use timer::{CounterTypeExt, Timer};
+mod indication;
 mod usart;
+use indication::{Indication, IndicationState};
 
 #[entry]
 fn main() -> ! {
@@ -39,10 +40,11 @@ fn main() -> ! {
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
     let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
     let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
+    let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
     let power_pin: Sim900PowerPin = gpiob.pb5.into_push_pull_output(&mut gpiob.crl);
-    let mut led: LedPin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+    let led_red = gpioa.pa11.into_push_pull_output(&mut gpioa.crh).downgrade();
+    let led_green = gpioa.pa12.into_push_pull_output(&mut gpioa.crh).downgrade();
     //_LED.set(led);
-    led.set_high().unwrap();
     Timer::init_system(dp.TIM2, &clocks, &mut rcc.apb1);
     //let mut itm = cp.ITM;
     //iprintln!(&mut itm.stim[0], "hello wordl!");
@@ -52,7 +54,9 @@ fn main() -> ! {
     let adapter = usart::create_adapter(
         dp.USART1,
         &mut afio.mapr,
-        dp.GPIOA,
+        gpioa.pa9,
+        gpioa.pa10,
+        &mut gpioa.crh,
         dp.DMA1.split(&mut rcc.ahb),
         clocks,
         &mut rcc.apb2,
@@ -67,12 +71,9 @@ fn main() -> ! {
     //    "0001000B919741123274F200082E0422044004350432043E043304300021000A0414043204350440044C0020043E0442043A0440044B044204300021",
     //);
     let r2 = sim900.get_state();
-    let mut t = Timer::new();
+    let mut indication: Indication = Indication::new(led_red, led_green);
+    indication.set_state(IndicationState::Demo);
     loop {
-        if t.every(1.sec()) {
-            cortex_m::interrupt::free(|_| {
-                led.toggle().unwrap();
-            })
-        }
+        indication.poll();
     }
 }
