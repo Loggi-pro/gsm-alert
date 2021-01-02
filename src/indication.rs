@@ -38,7 +38,10 @@ type LedPin = Pxx<Output<PushPull>>;
 #[derive(Copy, Clone, PartialEq)]
 pub enum IndicationState {
     Nothing,
-    Demo,
+    Idle,
+    Error,
+    ReadyToArm,
+    Armed,
 }
 pub struct Indication {
     led_red: Led,
@@ -74,13 +77,33 @@ impl Indication {
                     self.led_green.set_low();
                 }
             }
-            IndicationState::Demo => {
+            IndicationState::Idle => {
                 if self.state_changed {
-                    self.led_red.set_high();
+                    self.led_red.set_low();
+                    self.led_green.set_high();
+                }
+            }
+            IndicationState::Error => {
+                if self.state_changed {
+                    self.led_red.set_low();
                     self.led_green.set_low();
                 } else {
                     self.led_red.toggle();
                     self.led_green.toggle();
+                }
+            }
+            IndicationState::ReadyToArm => {
+                if self.state_changed {
+                    self.led_red.set_low();
+                    self.led_green.set_high();
+                } else {
+                    self.led_red.toggle();
+                }
+            }
+            IndicationState::Armed => {
+                if self.state_changed {
+                    self.led_red.set_high();
+                    self.led_green.set_high();
                 }
             }
         }

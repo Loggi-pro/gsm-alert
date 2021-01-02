@@ -72,7 +72,7 @@ fn main() -> ! {
     //);
     let r2 = sim900.get_state();
     let mut indication: Indication = Indication::new(led_red, led_green);
-    indication.set_state(IndicationState::Demo);
+    indication.set_state(IndicationState::Idle);
     loop {
         indication.poll();
     }
