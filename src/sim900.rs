@@ -40,10 +40,7 @@ use crate::usart::_USART;
 use crate::utils::span::Span;
 use core::str;
 use embedded_hal::digital::v2::OutputPin;
-pub struct Sim900 {
-    pin: Pxx<Output<PushPull>>,
-    t: Timer,
-}
+
 extern crate heapless;
 use core::fmt::Write;
 use heapless::consts::*;
@@ -92,38 +89,16 @@ fn request<'a, T: TimeType>(arr: &str, timeout: T) -> Result<(), RequestError<'a
     let res = write_and_wait_answer(arr, timeout);
     let result = match res {
         None => Err(RequestError::ETimeout),
-        Some(Span(data, len)) => parse(str::from_utf8(&data[0..len]).unwrap(), len),
+        Some(Span(data, len)) => {
+            let s = str::from_utf8(&data[0..len]);
+            if s.is_ok() {
+                parse(s.unwrap(), len)
+            } else {
+                Err(RequestError::ENoAnswer)
+            }
+        }
     };
     return result;
-}
-
-impl Sim900 {
-    const TIMEOUT: MilliSeconds = MilliSeconds(200_u16);
-    pub fn new(pin: Pxx<Output<PushPull>>) -> Self {
-        Sim900 {
-            pin,
-            t: Timer::new(),
-        }
-    }
-    pub fn power_on(mut self) -> Sim900Powered {
-        //try AT if device already powered
-        let res = request(SIM900_AT, Sim900::TIMEOUT);
-        if res.is_err() {
-            self.pin.set_high().unwrap();
-            self.t.wait(2.sec());
-            self.pin.set_low().unwrap();
-            self.t.wait(1.sec());
-        }
-        Sim900Powered {
-            state:Sim900State::Unknown
-            //pin: self.pin,
-            //t: self.t,
-        }
-    }
-
-    pub fn init(&mut self) {
-        self.pin.set_low().unwrap();
-    }
 }
 
 #[derive(Copy, Clone)]
@@ -134,8 +109,10 @@ pub enum Sim900State {
     BadAnswer,
     NoSim,
 }
-pub struct Sim900Powered {
+pub struct Sim900 {
     state: Sim900State,
+    pin: Pxx<Output<PushPull>>,
+    timer: Timer,
 }
 
 fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), RequestError<'a>> {
@@ -151,7 +128,22 @@ fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), Reques
     };
 }
 
-impl Sim900Powered {
+impl Sim900 {
+    const TIMEOUT: MilliSeconds = MilliSeconds(300_u16);
+
+    pub fn new(mut pin: Pxx<Output<PushPull>>) -> Self {
+        pin.set_low().unwrap();
+        Sim900 {
+            state: Sim900State::Unknown,
+            pin: pin,
+            timer: Timer::new(),
+        }
+    }
+    pub fn toggle_power(&mut self) {
+        self.pin.set_high().unwrap();
+        self.timer.wait(2.sec());
+        self.pin.set_low().unwrap();
+    }
     pub fn get_state(&self) -> Sim900State {
         return self.state;
     }
@@ -167,6 +159,26 @@ impl Sim900Powered {
             res
         } else {
             self.handle_request(res)
+        }
+    }
+    pub fn is_online<'a>(&mut self) -> Result<(), RequestError<'a>> {
+        self.handle_request(request(SIM900_AT, Sim900::TIMEOUT))
+    }
+    pub fn power_on<'a>(&mut self) -> Result<(), RequestError<'a>> {
+        //try AT if device already powered
+        let res = self.is_online();
+        if res.is_ok() {
+            return res;
+        }
+        self.toggle_power();
+        self.timer.wait(2.sec());
+        let res = self.is_online();
+        res
+    }
+    pub fn power_off(&mut self) {
+        let res = request(SIM900_AT, Sim900::TIMEOUT);
+        if res.is_ok() {
+            self.toggle_power();
         }
     }
 

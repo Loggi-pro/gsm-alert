@@ -21,6 +21,7 @@ pub struct UsartAdapter {
     tx_channel: hal::dma::dma1::C4,
     rx_channel: hal::dma::dma1::C5,
     rx_buf: [u8; MAX_SIZE],
+    current_rx_count: usize, //sometimes rx dma not reset coorectly, and intertnal index pointed not to start
 }
 
 #[allow(dead_code)]
@@ -50,6 +51,7 @@ impl UsartAdapter {
             tx_channel: tx_channel,
             rx_channel: rx_channel,
             rx_buf: [0; MAX_SIZE],
+            current_rx_count: 0,
         }
     }
 
@@ -79,14 +81,13 @@ impl UsartAdapter {
                 .dir()
                 .set_bit()
         });
+        atomic::compiler_fence(Ordering::Release);
         self.tx_channel.start();
         //block until all data was transmitted and received
         while self.tx_channel.in_progress() {}
         //stop
         atomic::compiler_fence(Ordering::Acquire);
-        self.tx_channel.ifcr().write(|w| w.cgif4().set_bit()); // C4 channel
-        self.tx_channel.ch().cr.modify(|_, w| w.en().clear_bit());
-
+        self.tx_channel.stop();
         unsafe {
             ptr::read_volatile(&0);
         }
@@ -116,7 +117,11 @@ impl UsartAdapter {
                 .dir()
                 .clear_bit()
         });
+
         self.flag_ready.store(false, Ordering::Relaxed);
+        self.current_rx_count = MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize;
+        atomic::compiler_fence(Ordering::Release);
+
         self.rx_channel.start();
     }
 
@@ -127,35 +132,21 @@ impl UsartAdapter {
         }
         atomic::compiler_fence(Ordering::Acquire);
         self.rx_channel.stop();
-        self.rx_channel.ifcr().write(|w| w.cgif5().set_bit()); // C4 channel
-        self.rx_channel.ch().cr.modify(|_, w| w.en().clear_bit());
 
         unsafe {
             ptr::read_volatile(&0);
         }
         atomic::compiler_fence(Ordering::Acquire);
-        let len = MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize;
-        Some(Span(&self.rx_buf, len))
+        let len =
+            MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize - self.current_rx_count;
+        Some(Span(&self.rx_buf[self.current_rx_count..], len))
     }
     ///read received data from buffer
     pub fn read_timeout<T: TimeType>(&mut self, time: T) -> Option<Span> {
         let mut t = Timer::new();
         t.reset();
         t.wait(time);
-        if !self.flag_ready.load(Ordering::Relaxed) {
-            return None;
-        }
-        atomic::compiler_fence(Ordering::Acquire);
-        self.rx_channel.stop();
-        self.rx_channel.ifcr().write(|w| w.cgif5().set_bit()); // C4 channel
-        self.rx_channel.ch().cr.modify(|_, w| w.en().clear_bit());
-
-        unsafe {
-            ptr::read_volatile(&0);
-        }
-        atomic::compiler_fence(Ordering::Acquire);
-        let len = MAX_SIZE - self.rx_channel.ch().ndtr.read().bits() as usize;
-        Some(Span(&self.rx_buf, len))
+        self.read_result()
     }
     ///blocking waiting something received
     pub fn read_data(&mut self) -> Span {

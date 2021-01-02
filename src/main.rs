@@ -6,14 +6,13 @@ extern crate panic_halt; // panic hnadler
 use cortex_m_rt::entry;
 extern crate hal;
 use crate::hal::{
-    gpio::{gpiob, Output, PushPull, Pxx},
+    gpio::{gpiob, Output, PushPull},
     pac::Peripherals,
     prelude::*,
 };
 
 #[allow(unused_imports)]
 use cortex_m::{asm::bkpt, iprint, iprintln, peripheral::ITM, singleton};
-use embedded_hal::digital::v2::OutputPin;
 #[allow(unused_imports)]
 use nb::block;
 
@@ -24,11 +23,13 @@ mod sim900;
 use sim900::Sim900;
 
 mod hardware;
-mod timer;
-use timer::{CounterTypeExt, Timer};
 mod indication;
+mod timer;
+use timer::Timer;
 mod usart;
-use indication::{Indication, IndicationState};
+use indication::Indication;
+mod algorithm;
+use algorithm::MainLogic;
 
 #[entry]
 fn main() -> ! {
@@ -38,7 +39,6 @@ fn main() -> ! {
     let mut flash = dp.FLASH.constrain();
     let mut rcc = dp.RCC.constrain();
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
-    let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
     let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
     let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
     let power_pin: Sim900PowerPin = gpiob.pb5.into_push_pull_output(&mut gpiob.crl);
@@ -62,18 +62,16 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
     usart::_USART.set(adapter);
-    let mut sim900 = Sim900::new(power_pin.downgrade());
-    sim900.init();
-    let mut sim900 = sim900.power_on();
-    let _ = sim900.setup();
-    let r = sim900.get_state();
+    let sim900 = Sim900::new(power_pin.downgrade());
+
     //sim900.send_pdu_sms(
     //    "0001000B919741123274F200082E0422044004350432043E043304300021000A0414043204350440044C0020043E0442043A0440044B044204300021",
     //);
-    let r2 = sim900.get_state();
-    let mut indication: Indication = Indication::new(led_red, led_green);
-    indication.set_state(IndicationState::Idle);
+
+    let indication: Indication = Indication::new(led_red, led_green);
+    let mut algorithm = MainLogic::new(sim900, indication);
+    algorithm.init();
     loop {
-        indication.poll();
+        algorithm.poll();
     }
 }
