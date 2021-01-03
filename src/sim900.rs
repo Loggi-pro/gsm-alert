@@ -113,6 +113,8 @@ pub struct Sim900 {
     state: Sim900State,
     pin: Pxx<Output<PushPull>>,
     timer: Timer,
+    main_state: u8,
+    sub_state: u8,
 }
 
 fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), RequestError<'a>> {
@@ -129,7 +131,7 @@ fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), Reques
 }
 
 impl Sim900 {
-    const TIMEOUT: MilliSeconds = MilliSeconds(300_u16);
+    const TIMEOUT: MilliSeconds = MilliSeconds(200_u16);
 
     pub fn new(mut pin: Pxx<Output<PushPull>>) -> Self {
         pin.set_low().unwrap();
@@ -137,12 +139,29 @@ impl Sim900 {
             state: Sim900State::Unknown,
             pin: pin,
             timer: Timer::new(),
+            main_state: 0,
+            sub_state: 0,
         }
     }
-    pub fn toggle_power(&mut self) {
-        self.pin.set_high().unwrap();
-        self.timer.wait(2.sec());
-        self.pin.set_low().unwrap();
+    fn toggle_power(&mut self) -> Option<()> {
+        match self.sub_state {
+            0 => {
+                self.pin.set_high().unwrap();
+                self.sub_state = 1;
+                self.timer.reset();
+                None
+            }
+            1 => {
+                if !self.timer.waiting(&2.sec()) {
+                    self.sub_state = 0;
+                    self.pin.set_low().unwrap();
+                    Some(())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
     pub fn get_state(&self) -> Sim900State {
         return self.state;
@@ -164,21 +183,69 @@ impl Sim900 {
     pub fn is_online<'a>(&mut self) -> Result<(), RequestError<'a>> {
         self.handle_request(request(SIM900_AT, Sim900::TIMEOUT))
     }
-    pub fn power_on<'a>(&mut self) -> Result<(), RequestError<'a>> {
-        //try AT if device already powered
-        let res = self.is_online();
-        if res.is_ok() {
-            return res;
+    pub fn power_on<'a>(&mut self) -> Option<Result<(), RequestError<'a>>> {
+        match self.main_state {
+            0 => {
+                //try AT if device already powered
+                let res = self.is_online();
+                if res.is_ok() {
+                    Some(res)
+                } else {
+                    self.main_state = 1;
+                    self.sub_state = 0;
+                    None
+                }
+            }
+            1 => {
+                if self.toggle_power().is_some() {
+                    self.main_state = 2;
+                    self.timer.reset();
+                }
+                None
+            }
+            2 => {
+                if !self.timer.waiting(&2.sec()) {
+                    self.main_state = 3;
+                }
+                None
+            }
+            3 => {
+                let res = self.is_online();
+                self.main_state = 0;
+                Some(res)
+            }
+            _ => {
+                self.main_state = 0;
+                None
+            }
         }
-        self.toggle_power();
-        self.timer.wait(2.sec());
-        let res = self.is_online();
-        res
     }
-    pub fn power_off(&mut self) {
-        let res = request(SIM900_AT, Sim900::TIMEOUT);
-        if res.is_ok() {
-            self.toggle_power();
+    pub fn power_off(&mut self) -> Option<()> {
+        match self.main_state {
+            0 => {
+                let res = request(SIM900_AT, Sim900::TIMEOUT);
+
+                if res.is_ok() {
+                    self.main_state = 1;
+                    self.sub_state = 0;
+                    None
+                } else {
+                    self.main_state = 0;
+                    Some(())
+                }
+            }
+            1 => {
+                if self.toggle_power().is_some() {
+                    self.main_state = 0;
+                    Some(())
+                } else {
+                    None
+                }
+            }
+            _ => {
+                self.main_state = 0;
+                None
+            }
         }
     }
 

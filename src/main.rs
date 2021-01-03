@@ -22,6 +22,8 @@ mod utils;
 mod sim900;
 use sim900::Sim900;
 
+mod button;
+use button::Button;
 mod hardware;
 mod indication;
 mod timer;
@@ -42,6 +44,7 @@ fn main() -> ! {
     let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
     let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
     let power_pin: Sim900PowerPin = gpiob.pb5.into_push_pull_output(&mut gpiob.crl);
+    let button_power = gpiob.pb6.into_pull_up_input(&mut gpiob.crl).downgrade();
     let led_red = gpioa.pa11.into_push_pull_output(&mut gpioa.crh).downgrade();
     let led_green = gpioa.pa12.into_push_pull_output(&mut gpioa.crh).downgrade();
     //_LED.set(led);
@@ -69,7 +72,7 @@ fn main() -> ! {
     //);
 
     let indication: Indication = Indication::new(led_red, led_green);
-    let mut algorithm = MainLogic::new(sim900, indication);
+    let mut algorithm = MainLogic::new(sim900, indication, Button::new(button_power, true));
     algorithm.init();
     loop {
         algorithm.poll();
