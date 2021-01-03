@@ -40,6 +40,7 @@ pub enum IndicationState {
     Nothing,
     Idle,
     Error,
+    CheckBeforeArm,
     ReadyToArm,
     Armed,
 }
@@ -47,7 +48,6 @@ pub struct Indication {
     led_red: Led,
     led_green: Led,
     state: IndicationState,
-    state_changed: bool,
     timer: Timer,
 }
 
@@ -57,56 +57,59 @@ impl Indication {
             led_red: Led::new(pin_red, false),
             led_green: Led::new(pin_green, false),
             state: IndicationState::Nothing,
-            state_changed: true,
             timer: Timer::new(),
         }
     }
     pub fn set_state(&mut self, state: IndicationState) {
-        self.state_changed = self.state != state;
-        self.state = state;
-    }
-
-    pub fn poll(&mut self) {
-        if !self.timer.every(1.sec()) {
-            return;
-        };
-        match self.state {
-            IndicationState::Nothing => {
-                if self.state_changed {
+        //initial state
+        if self.state != state {
+            match state {
+                IndicationState::Nothing => {
                     self.led_red.set_low();
                     self.led_green.set_low();
                 }
-            }
-            IndicationState::Idle => {
-                if self.state_changed {
+                IndicationState::Idle => {
                     self.led_red.set_low();
                     self.led_green.set_high();
                 }
-            }
-            IndicationState::Error => {
-                if self.state_changed {
+                IndicationState::Error => {
                     self.led_red.set_low();
                     self.led_green.set_low();
-                } else {
-                    self.led_red.toggle();
-                    self.led_green.toggle();
                 }
-            }
-            IndicationState::ReadyToArm => {
-                if self.state_changed {
+                IndicationState::ReadyToArm | IndicationState::CheckBeforeArm => {
                     self.led_red.set_low();
                     self.led_green.set_high();
-                } else {
-                    self.led_red.toggle();
                 }
-            }
-            IndicationState::Armed => {
-                if self.state_changed {
+                IndicationState::Armed => {
                     self.led_red.set_high();
                     self.led_green.set_high();
                 }
             }
         }
-        self.state_changed = false;
+        self.state = state;
+    }
+
+    pub fn poll(&mut self) {
+        match self.state {
+            IndicationState::Nothing => {}
+            IndicationState::Idle => {}
+            IndicationState::Error => {
+                if self.timer.every(1.sec()) {
+                    self.led_red.toggle();
+                    self.led_green.toggle();
+                }
+            }
+            IndicationState::CheckBeforeArm => {
+                if self.timer.every(250.mil()) {
+                    self.led_red.toggle();
+                }
+            }
+            IndicationState::ReadyToArm => {
+                if self.timer.every(1.sec()) {
+                    self.led_red.toggle();
+                }
+            }
+            IndicationState::Armed => {}
+        }
     }
 }

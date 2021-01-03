@@ -95,8 +95,10 @@ impl MainLogic {
         }
         if let Some(true) = self.power_button.is_pressed() {
             self.current_state = match self.current_state {
-                IndicationState::Armed | IndicationState::ReadyToArm => IndicationState::Idle,
-                IndicationState::Idle => IndicationState::ReadyToArm,
+                IndicationState::Armed
+                | IndicationState::ReadyToArm
+                | IndicationState::CheckBeforeArm => IndicationState::Idle,
+                IndicationState::Idle => IndicationState::CheckBeforeArm,
                 _ => self.current_state,
             };
             self.indication.set_state(self.current_state);
