@@ -42,6 +42,29 @@
         "source": "probe",
         "decoders": [{ "type": "console", "label": "ITM", "port": 0 }]
       }
+    },
+    {
+      /* Configuration for the STM32F303 Discovery board */
+      "type": "cortex-debug",
+      "request": "launch",
+      "name": "Release (OpenOCD)",
+      "servertype": "openocd",
+      "cwd": "${workspaceRoot}",
+      "preLaunchTask": "_cargo build",
+      "runToMain": true,
+      "executable": "${config:exec_basepath}/release/${config:exec_name}",
+      /* Run `cargo build --example itm` and uncomment this line to run itm example */
+      // "executable": "./target/thumbv7em-none-eabihf/debug/examples/itm",
+      "device": "${config:mcu}",
+      "configFiles": ["${config:openocd_config}"],
+      "svdFile": "${config:svd_file}",
+      "swoConfig": {
+        "enabled": true,
+        "cpuFrequency": 8000000,
+        "swoFrequency": 2000000,
+        "source": "probe",
+        "decoders": [{ "type": "console", "label": "ITM", "port": 0 }]
+      }
     }
   ],
   "inputs": [
