@@ -50,7 +50,7 @@
       "name": "Release (OpenOCD)",
       "servertype": "openocd",
       "cwd": "${workspaceRoot}",
-      "preLaunchTask": "_cargo build",
+      "preLaunchTask": "_cargo build --release",
       "runToMain": true,
       "executable": "${config:exec_basepath}/release/${config:exec_name}",
       /* Run `cargo build --example itm` and uncomment this line to run itm example */
