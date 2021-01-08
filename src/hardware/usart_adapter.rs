@@ -11,7 +11,7 @@ use crate::utils::span::Span;
 use core::ptr;
 use core::sync::atomic::{self, Ordering};
 
-const MAX_SIZE: usize = 200;
+const MAX_SIZE: usize = 250;
 
 type Usart1 = Serial<USART1, (PA9<Alternate<PushPull>>, PA10<Input<Floating>>)>;
 pub struct UsartAdapter {
@@ -65,7 +65,8 @@ impl UsartAdapter {
         self.tx_channel.set_memory_address(ptr as u32, true);
         self.tx_channel.set_transfer_length(len);
 
-        atomic::compiler_fence(Ordering::Release);
+        //atomic::compiler_fence(Ordering::Release);
+        atomic::compiler_fence(Ordering::SeqCst);
 
         self.tx_channel.ch().cr.modify(|_, w| {
             w.mem2mem()
@@ -81,17 +82,21 @@ impl UsartAdapter {
                 .dir()
                 .set_bit()
         });
-        atomic::compiler_fence(Ordering::Release);
+        //atomic::compiler_fence(Ordering::Release);
+        atomic::compiler_fence(Ordering::SeqCst);
         self.tx_channel.start();
+        atomic::compiler_fence(Ordering::SeqCst);
         //block until all data was transmitted and received
         while self.tx_channel.in_progress() {}
         //stop
-        atomic::compiler_fence(Ordering::Acquire);
+        //atomic::compiler_fence(Ordering::Acquire);
+        atomic::compiler_fence(Ordering::SeqCst);
         self.tx_channel.stop();
         unsafe {
             ptr::read_volatile(&0);
         }
-        atomic::compiler_fence(Ordering::Acquire);
+        //atomic::compiler_fence(Ordering::Acquire);
+        atomic::compiler_fence(Ordering::SeqCst);
     }
 
     ///start waiting for receive data

@@ -39,6 +39,7 @@ type LedPin = Pxx<Output<PushPull>>;
 pub enum IndicationState {
     Nothing,
     Idle,
+    IdleDoorClosed,
     Error,
     CheckBeforeArm,
     ReadyToArm,
@@ -72,6 +73,10 @@ impl Indication {
                     self.led_red.set_low();
                     self.led_green.set_high();
                 }
+                IndicationState::IdleDoorClosed => {
+                    self.led_red.set_low();
+                    self.led_green.set_low();
+                }
                 IndicationState::Error => {
                     self.led_red.set_low();
                     self.led_green.set_low();
@@ -93,6 +98,11 @@ impl Indication {
         match self.state {
             IndicationState::Nothing => {}
             IndicationState::Idle => {}
+            IndicationState::IdleDoorClosed => {
+                if self.timer.every(500.mil()) {
+                    self.led_green.toggle();
+                }
+            }
             IndicationState::Error => {
                 if self.timer.every(1.sec()) {
                     self.led_red.toggle();

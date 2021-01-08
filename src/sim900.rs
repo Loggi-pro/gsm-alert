@@ -1,3 +1,4 @@
+use core::sync::atomic::{self, Ordering};
 #[allow(dead_code)]
 static SIM900_AT: &str = "AT\r\n";
 static SIM900_DATA_MODE: &str = "AT+CBST=71,0,1\r\n";
@@ -5,7 +6,7 @@ static SIM900_DATA_MODE: &str = "AT+CBST=71,0,1\r\n";
 static SIM900_GET_SIM_STATUS: &str = "AT+CPIN?\r\n";
 //static SIM900_GET_MONEY: &str = "ATD#100#;\r\n";
 //static SIM900_GET_OPSOS: &str = "AT+COPS?\r\n";
-static SIM900_TEXT_MODE_ON: &str = "AT+CMGF=1\r\n";
+//static SIM900_TEXT_MODE_ON: &str = "AT+CMGF=1\r\n";
 static SIM900_PDU_MODE_ON: &str = "AT+CMGF=0\r\n";
 //static SIM900_UTF_MODE: &str = "AT+CSCS=\"UCS2\"\r\n";
 //static SIM900_AON_ENABLE: &str = "AT+CLIP=1\r\n";
@@ -116,7 +117,7 @@ pub struct Sim900 {
     main_state: u8,
     sub_state: u8,
 }
-
+#[allow(dead_code)]
 fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), RequestError<'a>> {
     return match r {
         Err(RequestError::EAnswerUnknown(data)) => {
@@ -129,7 +130,7 @@ fn expect_str<'a>(r: Result<(), RequestError<'a>>, s: &str) -> Result<(), Reques
         _ => r,
     };
 }
-
+#[allow(dead_code)]
 impl Sim900 {
     const TIMEOUT: MilliSeconds = MilliSeconds(200_u16);
 
@@ -287,10 +288,14 @@ impl Sim900 {
                 let len = (msg.len() - 2) / 2;
                 write!(cmd, "{}\r", len)?;
                 expect_str(request(&cmd, Sim900::TIMEOUT), ">")?;
-                let mut message: String<U200> = String::from(msg);
-                message.push_str(SIM900_CMD_ENTER)?;
-                let _ = request(&message, Sim900::TIMEOUT); //ignore answer
-                Ok(())
+                let _ = request(&msg, Sim900::TIMEOUT);
+                atomic::compiler_fence(Ordering::SeqCst);
+                let answer = expect_str(request(&SIM900_CMD_ENTER, 3.sec()), "+CMGS"); //ignore answer
+                if let Err(RequestError::EAnswerError) = answer {
+                    return Err(RequestError::EAnswerError);
+                } else {
+                    Ok(())
+                }
             }())
             .is_ok()
         } else {

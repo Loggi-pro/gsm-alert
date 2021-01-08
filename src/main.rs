@@ -2,7 +2,7 @@
 #![no_main]
 
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust#53964
-extern crate panic_halt; // panic hnadler
+//extern crate panic_halt; // panic hnadler
 use cortex_m_rt::entry;
 extern crate hal;
 use crate::hal::{
@@ -68,11 +68,8 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
     usart::_USART.set(adapter);
-    let sim900 = Sim900::new(power_pin.downgrade());
 
-    //sim900.send_pdu_sms(
-    //    "0001000B919741123274F200082E0422044004350432043E043304300021000A0414043204350440044C0020043E0442043A0440044B044204300021",
-    //);
+    let sim900 = Sim900::new(power_pin.downgrade());
 
     let indication: Indication = Indication::new(led_red, led_green);
     let mut algorithm = MainLogic::new(
@@ -84,5 +81,17 @@ fn main() -> ! {
     algorithm.init();
     loop {
         algorithm.poll();
+    }
+}
+use core::panic::PanicInfo;
+use core::sync::atomic::{self, Ordering};
+#[inline(never)]
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    if let Some(s) = _info.payload().downcast_ref::<&str>() {
+        usart::_USART.get().write_data(s.as_bytes());
+    }
+    loop {
+        atomic::compiler_fence(Ordering::SeqCst);
     }
 }

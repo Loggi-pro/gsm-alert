@@ -1,5 +1,6 @@
 use crate::hal::pac::TIM2;
 use crate::hardware::system_timer::{CounterType, SystemTimer};
+use core::sync::atomic::{self, Ordering};
 pub struct Timer {
     time: CounterType,
 }
@@ -24,6 +25,7 @@ impl Timer {
     pub fn wait<T: TimeType>(&mut self, time: T) {
         self.reset();
         while self.waiting(&time) {
+            atomic::compiler_fence(Ordering::SeqCst);
             continue;
         }
     }
@@ -91,5 +93,22 @@ impl From<Seconds> for MilliSeconds {
 impl From<MilliSeconds> for Seconds {
     fn from(val: MilliSeconds) -> Self {
         Self(val.0 / 1_000)
+    }
+}
+
+use core::ops::Add;
+impl Add for Seconds {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+
+impl Add for MilliSeconds {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
     }
 }

@@ -10,7 +10,7 @@ edition = "2018"
 cortex-m = "0.6.3"
 cortex-m-rt = "0.6.3"
 cortex-m-semihosting = "*"
-panic-halt = "0.2.0"
+#panic-halt = "0.2.0"
 embedded-hal = "0.2.3"
 heapless = "0.4.x"
 nb = "0.1.2"
@@ -25,10 +25,10 @@ debug = true # Нормальные символы, не увеличивающ�
 lto = true # Лучшая оптимизация
 
 [profile.dev]
-panic = "abort"
+#panic = "abort"
 codegen-units = 1
 #debug = 0
-lto = true
+#lto = true
 #opt-level = "z"
 
 # Optimize all dependencies
